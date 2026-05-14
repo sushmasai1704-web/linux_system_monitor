@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>System Monitor Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+    h1 { text-align: center; color: #38bdf8; }
+    .cards { display: flex; gap: 20px; justify-content: center; margin: 20px 0; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; text-align: center; width: 150px; }
+    .card h2 { font-size: 2em; margin: 0; }
+    .card p { margin: 5px 0 0; color: #94a3b8; }
+    .cpu { color: #f87171; }
+    .mem { color: #60a5fa; }
+    .disk { color: #4ade80; }
+    canvas { background: #1e293b; border-radius: 12px; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>🖥️ Linux System Monitor Dashboard</h1>
+  <div class="cards">
+    <div class="card"><h2 class="cpu" id="cpu">--</h2><p>CPU %</p></div>
+    <div class="card"><h2 class="mem" id="mem">--</h2><p>Memory %</p></div>
+    <div class="card"><h2 class="disk" id="disk">--</h2><p>Disk %</p></div>
+  </div>
+  <canvas id="chart" width="900" height="300"></canvas>
+  <script>
+    const labels = [], cpuData = [], memData = [], diskData = [];
+    const ctx = document.getElementById("chart").getContext("2d");
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { label: "CPU %", data: cpuData, borderColor: "#f87171", tension: 0.3, fill: false },
+          { label: "Memory %", data: memData, borderColor: "#60a5fa", tension: 0.3, fill: false },
+          { label: "Disk %", data: diskData, borderColor: "#4ade80", tension: 0.3, fill: false }
+        ]
+      },
+      options: { scales: { y: { min: 0, max: 100 } }, animation: false }
+    });
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch("/metrics");
+        const d = await res.json();
+        document.getElementById("cpu").textContent = d.cpu_percent + "%";
+        document.getElementById("mem").textContent = d.memory_percent + "%";
+        document.getElementById("disk").textContent = d.disk_percent + "%";
+        const t = new Date().toLocaleTimeString();
+        labels.push(t); cpuData.push(d.cpu_percent);
+        memData.push(d.memory_percent); diskData.push(d.disk_percent);
+        if (labels.length > 20) { labels.shift(); cpuData.shift(); memData.shift(); diskData.shift(); }
+        chart.update();
+      } catch(e) { console.log("API error:", e); }
+    }
+
+    // Web Worker trick to avoid browser throttling in background tabs
+    const worker = new Worker(URL.createObjectURL(new Blob([
+      `setInterval(() => postMessage('tick'), 3000);`
+    ])));
+    worker.onmessage = () => fetchMetrics();
+
+    // Also refresh immediately when tab becomes visible again
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') fetchMetrics();
+    });
+
+    fetchMetrics(); // initial load
+  </script>
+</body>
+</html>
