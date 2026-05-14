@@ -1,4 +1,3 @@
-system_log.csv
 __pycache__/
 *.pyc
-*.png
+system_log.csv
