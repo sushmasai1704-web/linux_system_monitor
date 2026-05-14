@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linux System Monitor Dashboard</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: 'Syne', sans-serif; min-height: 100vh; padding: 1.5rem; }
+  :root {
+    --cpu-color: #E24B4A; --mem-color: #378ADD; --disk-color: #1D9E75;
+    --card-bg: #161b22; --border: rgba(255,255,255,0.08);
+  }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-title { font-size: 20px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #1D9E75; animation: pulse-dot 2s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+  .last-update { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; }
+  .health-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:500; padding:4px 12px; border-radius:8px; font-family:'JetBrains Mono',monospace; }
+  .health-ok { background: rgba(29,158,117,0.15); color: #1D9E75; border: 0.5px solid rgba(29,158,117,0.3); }
+  .health-warn { background: rgba(186,117,23,0.15); color: #EF9F27; border: 0.5px solid rgba(186,117,23,0.3); }
+  .metric-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+  .metric-card { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; position: relative; overflow: hidden; }
+  .metric-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; border-radius:12px 12px 0 0; }
+  .metric-card.cpu::before { background: var(--cpu-color); }
+  .metric-card.mem::before { background: var(--mem-color); }
+  .metric-card.disk::before { background: var(--disk-color); }
+  .metric-icon { font-size: 18px; margin-bottom: 8px; }
+  .metric-card.cpu .metric-icon { color: var(--cpu-color); }
+  .metric-card.mem .metric-icon { color: var(--mem-color); }
+  .metric-card.disk .metric-icon { color: var(--disk-color); }
+  .metric-value { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 600; line-height: 1; margin-bottom: 4px; }
+  .metric-card.cpu .metric-value { color: var(--cpu-color); }
+  .metric-card.mem .metric-value { color: var(--mem-color); }
+  .metric-card.disk .metric-value { color: var(--disk-color); }
+  .metric-label { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+  .metric-bar-track { margin-top: 12px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
+  .metric-bar-fill { height: 100%; border-radius: 2px; transition: width 0.8s cubic-bezier(0.4,0,0.2,1); }
+  .metric-card.cpu .metric-bar-fill { background: var(--cpu-color); }
+  .metric-card.mem .metric-bar-fill { background: var(--mem-color); }
+  .metric-card.disk .metric-bar-fill { background: var(--disk-color); }
+  .metric-sub { margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; }
+  .chart-section { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .chart-title { font-size: 13px; font-weight: 500; color: #8b949e; text-transform: uppercase; letter-spacing: 0.6px; }
+  .chart-legend { display: flex; gap: 16px; font-size: 11px; color: #8b949e; font-family: 'JetBrains Mono', monospace; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+  .chart-wrap { position: relative; width: 100%; height: 220px; }
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .log-section, .alert-section { background: var(--card-bg); border: 0.5px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; }
+  .section-title { font-size: 13px; font-weight: 500; color: #8b949e; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+  .log-entry { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 0.5px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: #8b949e; min-width: 70px; }
+  .log-vals { display: flex; gap: 10px; }
+  .log-cpu { color: var(--cpu-color); } .log-mem { color: var(--mem-color); } .log-disk { color: var(--disk-color); }
+  .alert-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .alert-label { font-size: 12px; color: #e6edf3; font-weight: 500; }
+  .alert-sub { font-size: 11px; color: #8b949e; font-family: 'JetBrains Mono', monospace; }
+  .alert-controls { display: flex; align-items: center; gap: 8px; }
+  .threshold-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; min-width: 36px; text-align: right; }
+  .threshold-val.cpu { color: var(--cpu-color); } .threshold-val.mem { color: var(--mem-color); } .threshold-val.disk { color: var(--disk-color); }
+  input[type="range"] { width: 90px; accent-color: #378ADD; }
+  #alertLog { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #8b949e; min-height: 32px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="status-dot"></div>
+    <span class="header-title">&#128444; Linux System Monitor</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span class="health-badge health-ok" id="healthBadge">&#10003; Healthy</span>
+    <span class="last-update" id="lastUpdate">updating...</span>
+  </div>
+</div>
+
+<div class="metric-cards">
+  <div class="metric-card cpu">
+    <div class="metric-icon">&#xe4f4;</div>
+    <div class="metric-value" id="cpuVal">—</div>
+    <div class="metric-label">CPU Usage</div>
+    <div class="metric-bar-track"><div class="metric-bar-fill" id="cpuBar" style="width:0%"></div></div>
+    <div class="metric-sub" id="cpuSub">— avg load</div>
+  </div>
+  <div class="metric-card mem">
+    <div class="metric-icon">&#128190;</div>
+    <div class="metric-value" id="memVal">—</div>
+    <div class="metric-label">Memory Usage</div>
+    <div class="metric-bar-track"><div class="metric-bar-fill" id="memBar" style="width:0%"></div></div>
+    <div class="metric-sub" id="memSub">— GB used</div>
+  </div>
+  <div class="metric-card disk">
+    <div class="metric-icon">&#128190;</div>
+    <div class="metric-value" id="diskVal">—</div>
+    <div class="metric-label">Disk Usage</div>
+    <div class="metric-bar-track"><div class="metric-bar-fill" id="diskBar" style="width:0%"></div></div>
+    <div class="metric-sub" id="diskSub">— GB used</div>
+  </div>
+</div>
+
+<div class="chart-section">
+  <div class="chart-header">
+    <span class="chart-title">Live History (last 20 readings)</span>
+    <div class="chart-legend">
+      <span><span class="legend-dot" style="background:#E24B4A"></span>CPU%</span>
+      <span><span class="legend-dot" style="background:#378ADD"></span>MEM%</span>
+      <span><span class="legend-dot" style="background:#1D9E75"></span>DISK%</span>
+    </div>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="liveChart"></canvas>
+  </div>
+</div>
+
+<div class="bottom-row">
+  <div class="log-section">
+    <div class="section-title">Recent Log</div>
+    <div id="logList"></div>
+  </div>
+  <div class="alert-section">
+    <div class="section-title">Alert Thresholds</div>
+    <div class="alert-row">
+      <div><div class="alert-label">CPU</div><div class="alert-sub" id="cpuAlertSub">alert at 80%</div></div>
+      <div class="alert-controls">
+        <input type="range" min="10" max="100" step="5" value="80" id="cpuThresh">
+        <span class="threshold-val cpu" id="cpuThreshVal">80%</span>
+      </div>
+    </div>
+    <div class="alert-row">
+      <div><div class="alert-label">Memory</div><div class="alert-sub" id="memAlertSub">alert at 85%</div></div>
+      <div class="alert-controls">
+        <input type="range" min="10" max="100" step="5" value="85" id="memThresh">
+        <span class="threshold-val mem" id="memThreshVal">85%</span>
+      </div>
+    </div>
+    <div class="alert-row">
+      <div><div class="alert-label">Disk</div><div class="alert-sub" id="diskAlertSub">alert at 90%</div></div>
+      <div class="alert-controls">
+        <input type="range" min="10" max="100" step="5" value="90" id="diskThresh">
+        <span class="threshold-val disk" id="diskThreshVal">90%</span>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:0.5px solid var(--border);">
+      <div class="alert-label" style="margin-bottom:4px;">Alert log</div>
+      <div id="alertLog">No alerts triggered.</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const MAX_POINTS = 20;
+const cpuHistory=[], memHistory=[], diskHistory=[], labelHistory=[];
+const logEntries=[];
+let cpuThresh=80, memThresh=85, diskThresh=90;
+let alertMessages=[];
+let cpu=1.2+Math.random()*4, mem=10+Math.random()*5, disk=0.5+Math.random()*2;
+
+const ctx = document.getElementById('liveChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: labelHistory,
+    datasets: [
+      { label:'CPU %', data:cpuHistory, borderColor:'#E24B4A', backgroundColor:'rgba(226,75,74,0.08)', tension:0.4, pointRadius:2, pointHoverRadius:4, borderWidth:2, fill:true },
+      { label:'MEM %', data:memHistory, borderColor:'#378ADD', backgroundColor:'rgba(55,138,221,0.08)', tension:0.4, pointRadius:2, pointHoverRadius:4, borderWidth:2, fill:true },
+      { label:'DISK %', data:diskHistory, borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)', tension:0.4, pointRadius:2, pointHoverRadius:4, borderWidth:2, fill:true }
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, animation:{duration:600},
+    plugins:{ legend:{display:false}, tooltip:{mode:'index',intersect:false, callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)}%`}} },
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,0.06)'}, ticks:{color:'#8b949e', font:{family:'JetBrains Mono',size:10}, maxTicksLimit:8}},
+      y:{min:0, max:100, grid:{color:'rgba(255,255,255,0.06)'}, ticks:{color:'#8b949e', font:{family:'JetBrains Mono',size:10}, callback:v=>v+'%'}}
+    }
+  }
+});
+
+function simMetric(prev, min, max, drift=3) {
+  return Math.min(max, Math.max(min, prev+(Math.random()-0.48)*drift));
+}
+function formatTime() {
+  return new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function checkAlerts(c,m,d) {
+  const msgs=[];
+  if(c>=cpuThresh) msgs.push(`CPU at ${c.toFixed(1)}% >= ${cpuThresh}%`);
+  if(m>=memThresh) msgs.push(`MEM at ${m.toFixed(1)}% >= ${memThresh}%`);
+  if(d>=diskThresh) msgs.push(`DISK at ${d.toFixed(1)}% >= ${diskThresh}%`);
+  if(msgs.length){
+    const t=formatTime();
+    msgs.forEach(msg=>alertMessages.unshift(`[${t}] ${msg}`));
+    if(alertMessages.length>5) alertMessages=alertMessages.slice(0,5);
+    document.getElementById('alertLog').innerHTML=alertMessages.map(m=>`<div style="color:#EF9F27">${m}</div>`).join('');
+  }
+  const badge=document.getElementById('healthBadge');
+  if(msgs.length){ badge.className='health-badge health-warn'; badge.innerHTML='&#9888; Warning'; }
+  else { badge.className='health-badge health-ok'; badge.innerHTML='&#10003; Healthy'; }
+}
+function update() {
+  cpu=simMetric(cpu,0.2,95,4); mem=simMetric(mem,8,80,1.5); disk=simMetric(disk,0.3,5,0.3);
+  const t=formatTime();
+  document.getElementById('cpuVal').textContent=cpu.toFixed(1)+'%';
+  document.getElementById('memVal').textContent=mem.toFixed(1)+'%';
+  document.getElementById('diskVal').textContent=disk.toFixed(1)+'%';
+  document.getElementById('cpuBar').style.width=Math.min(cpu,100)+'%';
+  document.getElementById('memBar').style.width=Math.min(mem,100)+'%';
+  document.getElementById('diskBar').style.width=Math.min(disk,100)+'%';
+  document.getElementById('cpuSub').textContent=`${(cpu/25).toFixed(1)} avg load`;
+  document.getElementById('memSub').textContent=`${(mem*0.16).toFixed(2)} GB used`;
+  document.getElementById('diskSub').textContent=`${(disk*5).toFixed(1)} GB used`;
+  document.getElementById('lastUpdate').textContent=`updated ${t}`;
+  if(cpuHistory.length>=MAX_POINTS){cpuHistory.shift();memHistory.shift();diskHistory.shift();labelHistory.shift();}
+  cpuHistory.push(parseFloat(cpu.toFixed(2)));
+  memHistory.push(parseFloat(mem.toFixed(2)));
+  diskHistory.push(parseFloat(disk.toFixed(2)));
+  labelHistory.push(t);
+  chart.update();
+  logEntries.unshift({t,cpu:cpu.toFixed(1),mem:mem.toFixed(1),disk:disk.toFixed(1)});
+  if(logEntries.length>6) logEntries.pop();
+  document.getElementById('logList').innerHTML=logEntries.map(e=>
+    `<div class="log-entry"><span class="log-time">${e.t}</span><div class="log-vals"><span class="log-cpu">${e.cpu}%</span><span class="log-mem">${e.mem}%</span><span class="log-disk">${e.disk}%</span></div></div>`
+  ).join('');
+  checkAlerts(cpu,mem,disk);
+}
+['cpu','mem','disk'].forEach(key=>{
+  const slider=document.getElementById(`${key}Thresh`);
+  const valEl=document.getElementById(`${key}ThreshVal`);
+  const subEl=document.getElementById(`${key}AlertSub`);
+  slider.addEventListener('input',()=>{
+    const v=parseInt(slider.value);
+    if(key==='cpu') cpuThresh=v;
+    if(key==='mem') memThresh=v;
+    if(key==='disk') diskThresh=v;
+    valEl.textContent=v+'%';
+    subEl.textContent=`alert at ${v}%`;
+  });
+});
+update();
+setInterval(update,3000);
+</script>
+</body>
+</html>
+HTMLEOF
+echo "Done"
+Output
+
+Done
+file:///C:/Users/msush/Downloads/linux_system_monitor_dashboard.html
